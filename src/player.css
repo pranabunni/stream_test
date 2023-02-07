@@ -1,0 +1,28 @@
+#player {
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    background-color: #333;
+    display: inline-block;
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+#player .vjs-menu {
+    display: none;
+}
+#player .vjs-big-play-button{
+    display: none;
+}
+#player .vjs-modal-dialog {
+    display: none;
+}
+#player .tcp-statistic {
+    display: none;
+}
+
+video {
+    width: 100%;
+    height: 100%;
+}
