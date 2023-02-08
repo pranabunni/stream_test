@@ -128,6 +128,12 @@ const Player: Component = () => {
                         stats.raw.forEach((report) => {
                             if ('timestamp' in report) {
                                 wowzaRTCTimeStamp = new Date(report.timestamp);
+                                const currentTime = new Date();
+                                const  currentDiff = (currentTime.getTime() - wowzaRTCTimeStamp.getTime()) / 1000;
+                                // if tencent webRTC latency is higher than 4 secs then relay on timestamp
+                                if (currentDiff > 3) {
+                                    alert('greater than 4 secs need to relay on slide sync timestamps');
+                                }
                             }
                         });
                     }
@@ -159,9 +165,8 @@ const Player: Component = () => {
                 tencentWebRTCTimeStamp = new Date(timestamp);
                 const currentTime = new Date();
                 const  currentDiff = (currentTime.getTime() - tencentWebRTCTimeStamp.getTime()) / 1000;
-
                 // if tencent webRTC latency is higher than 4 secs then relay on timestamp
-                if (currentDiff > 4) {
+                if (currentDiff > 3) {
                     alert('greater than 4 secs need to relay on slide sync timestamps');
                 }
             }
