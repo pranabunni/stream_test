@@ -6,6 +6,7 @@ import flowplayer from '@flowplayer/player';
 import  HlsPlugin from '@flowplayer/player/plugins/hls';
 import ID3Plugin from '@flowplayer/player/plugins/id3';
 import FasPlugin from '@flowplayer/player/plugins/fas';
+import { Director, View } from '@wowzamediasystems/sdk-rts'
 
 flowplayer(HlsPlugin, ID3Plugin, FasPlugin);
 
@@ -16,6 +17,7 @@ const Player: Component = () => {
     let tencentWebRTCTimeStamp = null;
     const [timeStamp, setTimeStamp] = createSignal('');
     let canSupportID3 = false;
+    let wowzaRTCTimeStamp = null;
 
 
     onMount(() => {
@@ -61,6 +63,7 @@ const Player: Component = () => {
                 setTimeStamp('');
                 canSupportID3 = false;
                 tencentWebRTCTimeStamp = null;
+                wowzaRTCTimeStamp = null;
                 setState('playerPlaying', () => false);
             });
 
@@ -80,13 +83,15 @@ const Player: Component = () => {
                             const latency = Math.ceil(player.hls.latency);
                             currentTime.setSeconds(currentTime.getSeconds() - latency);
                             setTimeStamp(currentTime.toUTCString());
-                        } else if ('getStartDate' in player && player.getStartDate() !== 'invalid date' && !canSupportID3) {
+                        } else if ('getStartDate' in player && !isNaN(player.getStartDate()) && !canSupportID3) {
                             const playerStartTime = player.getStartDate();
                             playerStartTime.setSeconds(playerStartTime.getSeconds() + player.currentTime);
                             setTimeStamp(playerStartTime.toUTCString());
                         }
                     } else if(tencentWebRTCTimeStamp) {
                         setTimeStamp(tencentWebRTCTimeStamp.toUTCString());
+                    } else if(wowzaRTCTimeStamp) {
+                        setTimeStamp(wowzaRTCTimeStamp.toUTCString());
                     }
                 }
             });
@@ -94,17 +99,41 @@ const Player: Component = () => {
     });
 
 
-    const configureWowzaStreaming = (streamId) => {
-        // const wowza = window.wowza;
-        // const tokenGenerator = () => wowza.Director.getSubscriber({ streamName:streamId});
-        // const wowzaView = new wowza.View(streamId, tokenGenerator, player);
-        // try {
-        //     (async () => await wowzaView.connect())();
-        //     console.log('wowzaView', wowzaView);
-        // } catch (e) {
-        //     console.log('There was an error while trying to connect with the wowza publisher', e)
-        //     wowzaView.reconnect()
-        // }
+    const configureWowzaStreaming = (streamName: string) => {
+
+        let fps = [];
+        //Define callback for generate new token
+        const tokenGenerator = () => Director.getSubscriber({streamName, streamAccountId: ''});
+
+        //Create a new instance
+        const wowzaView = new View(streamName, tokenGenerator, player);
+
+        //Start connection to publisher
+        wowzaView.connect().then(() => {
+            if (wowzaView.webRTCPeer) {
+                wowzaView.webRTCPeer.initStats();
+                //Capture new stats from event every second
+                wowzaView.webRTCPeer.on('stats', (stats) => {
+                    if (stats.video && stats.video.inbounds && stats.video.inbounds.length) {
+                        const frag = stats.video.inbounds[0];
+                        if (frag && frag.framesPerSecond && frag.framesPerSecond < 24 && fps.length < 60) {
+                            fps.push(frag.framesPerSecond);
+                        } else {
+                            fps = [];
+                        }
+                    }
+                    if (fps.length === 60) {
+                        alert('please turn off the low latency stream for now.')
+                    } else if (stats.raw) {
+                        stats.raw.forEach((report) => {
+                            if ('timestamp' in report) {
+                                wowzaRTCTimeStamp = new Date(report.timestamp);
+                            }
+                        });
+                    }
+                });
+            }
+        }).catch(err => console.log('wowza webrtc connect error'));
     }
 
     const configureTencentStreaming = (webRtcURL) => {
@@ -146,17 +175,18 @@ const Player: Component = () => {
     const configureHlsStreaming = (playbackURL) => {
         let fps = [];
         player.on('ID3', ({data}) => {
-            const UtcRegex = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})$/;
-            const isoSecsRegex = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)$/;
-            const isoMilliSecsRegex = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}:\d{3}Z)$/;
+            const UtcRegex = /^([1-9]\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T(0[0-9]|1[0-9]|2[0-4]):(5[0-9]|[0-4]\d):(5[0-9]|[0-4]\d)$)/;
+            const iosRegex = /^([1-9]\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T(0[0-9]|1[0-9]|2[0-4]):(5[0-9]|[0-4]\d):(5[0-9]|[0-4]\d)([Zz])$)/
+            const UtcMilliSecsRegex = /^([1-9]\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T(0[0-9]|1[0-9]|2[0-4]):(5[0-9]|[0-4]\d):(5[0-9]|[0-4]\d):(\d{3})$)/;
+            const IsoMilliSecsRegex = /^([1-9]\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T(0[0-9]|1[0-9]|2[0-4]):(5[0-9]|[0-4]\d):(5[0-9]|[0-4]\d):(\d{3}[Zz]|\d{3})$)/;
             if (data.cue.value && data.cue.value.info && data.cue.value.info === 'programDateTime' && data.cue.value.data) {
                 canSupportID3 = true;
                 setTimeStamp(new Date(data.cue.value.data).toUTCString())
-            } else if (UtcRegex.test(data.cue.value.data)) {
+            } else if (UtcRegex.test(data.cue.value.data) || UtcMilliSecsRegex.test(data.cue.value.data)) {
                 canSupportID3 = true;
                 const dateString = data.cue.value.data + 'Z';
                 setTimeStamp(new Date(dateString).toUTCString());
-            } else if (isoSecsRegex.test(data.cue.value.data) || isoMilliSecsRegex.test(data.cue.value.data)) {
+            } else if (iosRegex.test(data.cue.value.data) || IsoMilliSecsRegex.test(data.cue.value.data)) {
                 setTimeStamp(new Date(data.cue.value.data).toUTCString());
             }
         });

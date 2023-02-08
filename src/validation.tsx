@@ -43,9 +43,20 @@ export const useForm = ({ errorClass })  => {
                         errorClass && ref.classList.toggle(errorClass, false);
                     }
                     break;
+                case 'wowza_rtc':
+                    const wowzaRegex = /(\w)+.{26,}$/;
+                    if (!wowzaRegex.test(ref.value)) {
+                        setState('formValidations', errors => ({...errors, [ref.name]: 'Please provide a valid wowza URL'}));
+                        errorClass && ref.classList.toggle(errorClass, true);
+                    } else {
+                        setState('formValidations', errors => ({...errors, [ref.name]: null}));
+                        errorClass && ref.classList.toggle(errorClass, false);
+                    }
+                    break;
                 default:
                     setState('formValidations', errors => ({...errors, [ref.name]: null}));
                     errorClass && ref.classList.toggle(errorClass, false);
+                    break;
             }
         };
     };
