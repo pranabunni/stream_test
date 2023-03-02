@@ -18,13 +18,43 @@ const Player: Component = () => {
     const [timeStamp, setTimeStamp] = createSignal('');
     let canSupportID3 = false;
     let wowzaRTCTimeStamp = null;
+    let tencentFPS = [];
+    const tencentTimeUpdate = ({data: {timestamp, video: {framesPerSecond}}}) => {
 
+        // minimum fps for playing a video with realistic motion is 24
+        if (framesPerSecond && framesPerSecond < 24 && tencentFPS.length < 60) {
+            tencentFPS = [...tencentFPS, framesPerSecond];
+        } else {
+            tencentFPS = []; // reset the array in case the video having an at least fps of greater than 24
+        }
+
+        if (tencentFPS.length === 60) {
+            alert('Having trouble to play the video. Please reload the page again.');
+        } else if (timestamp) {
+            tencentWebRTCTimeStamp = new Date(timestamp);
+            const currentTime = new Date();
+            const  currentDiff = (currentTime.getTime() - tencentWebRTCTimeStamp.getTime()) / 1000;
+            // if tencent webRTC latency is higher than 4 secs then relay on timestamp
+            if (currentDiff > 3) {
+                alert('greater than 4 secs need to relay on slide sync timestamps');
+            }
+        }
+    };
+    const tencentErrorhandler = (err) => {
+        console.log('tencent player error', err);
+    };
 
     onMount(() => {
         createEffect((prevState) => {
             if (prevState && prevState !== state.streamProvider) {
                 if (player) {
                    player.destroy();
+                   if (prevState === 'tencent') {
+                       tencent = null;
+                       tencentWebRTCTimeStamp = null;
+                       tencentFPS = [];
+                       setTimeStamp('');
+                   }
                 }
                 if (playerElem) {
                     playerElem.innerHTML = '';
@@ -57,18 +87,25 @@ const Player: Component = () => {
                 seekable: false,
             });
             player.on('reap', () => {
-                console.log('flowplayer destroyed');
-                tencent = null;
+                console.log('player destroyed');
                 player = null;
+                tencent = null;
+                tencentWebRTCTimeStamp = null;
+                tencentFPS = [];
                 setTimeStamp('');
                 canSupportID3 = false;
-                tencentWebRTCTimeStamp = null;
                 wowzaRTCTimeStamp = null;
                 setState('playerPlaying', () => false);
             });
 
             player.on('playing', () => {
                 setState('playerPlaying', () => true);
+            });
+
+            player.on('volumechange', () => {
+                if (tencent) {
+                    tencent.muted(player.muted);
+                }
             });
 
             player.on('error', (error) => {
@@ -148,32 +185,18 @@ const Player: Component = () => {
             language: 'en',
             muted: true,
             controlBar: false,
+            autoplay: true,
         });
-        let fps = [];
-        tencent.on('webrtcstats', ({data: {timestamp, video: {framesPerSecond}}}) => {
 
-            // minimum fps for playing a video with realistic motion is 24
-            if (framesPerSecond && framesPerSecond < 24 && fps.length < 60) {
-                fps = [...fps, framesPerSecond];
-            } else {
-                fps = []; // reset the array in case the video having an at least fps of greater than 24
-            }
-
-            if (fps.length === 60) {
-                alert('Having trouble to play the video. Please reload the page again.');
-            } else if (timestamp) {
-                tencentWebRTCTimeStamp = new Date(timestamp);
-                const currentTime = new Date();
-                const  currentDiff = (currentTime.getTime() - tencentWebRTCTimeStamp.getTime()) / 1000;
-                // if tencent webRTC latency is higher than 4 secs then relay on timestamp
-                if (currentDiff > 3) {
-                    alert('greater than 4 secs need to relay on slide sync timestamps');
-                }
+        tencent.on('webrtcstats', tencentTimeUpdate);
+        tencent.on('play', () => {
+            const loadingElem = document.querySelector('.fp-wait');
+            if (loadingElem) {
+                loadingElem.parentNode.removeChild(loadingElem);
             }
         });
-        tencent.on('error', (err) => {
-            console.log('tencent player error', err);
-        });
+
+        tencent.on('error', tencentErrorhandler);
         tencent.src(webRtcURL);
     }
 
