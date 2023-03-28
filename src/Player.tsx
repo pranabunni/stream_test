@@ -166,6 +166,7 @@ const Player: Component = () => {
                    }
                    if (prevState === 'wowza') {
                        wowzaView.webRTCPeer.off('stats', wowzaTimeUpdate);
+                       wowzaView.off('track', wowzaMediaTracker);
                    }
                 }
                 if (playerElem) {
