@@ -101,48 +101,50 @@ const Player: Component = () => {
         const videoTrack = data?.video;
         const audioTrack = data?.audio;
 
-        if (videoTrack && (videoTrack.bitrate || videoTrack.framesPerSecond)) {
-            if (tencentJerkyFrames.length >=60) {
-                alert('choppy video');
-                return;
-            }
-            if ( videoTrack['framesPerSecond'] < 20) {
-                tencentJerkyFrames.push(videoTrack['framesPerSecond']);
-            } else {
-                tencentJerkyFrames = [];
-            }
-            const bitrate = +(videoTrack['bitrate'] / 1000).toFixed(0);
-            const plr = audioTrack['packetsLost'] / (audioTrack['packetsLost'] + audioTrack['packetsReceived']) * 100;
-
-            if (tencentPacketsLoss.length > 60) {
-                alert('video is jerky');
-                return;
-            }
-
-            if (plr > 2) {
-                tencentPacketsLoss.push(plr);
-            } else {
-                tencentPacketsLoss = [];
-            }
-
-            /**
-             * getting higher jitter even when the stream haven't much latency
-             */
-            const jitter = audioTrack['jitterBufferDelay'] || 10;
-            console.log('bit', bitrate);
-            console.log('plr', plr);
-            console.log('jitter', jitter);
-
-            if (bitrate < 450) {
-                alert('poor video quality');
-            } else {
-                tencentWebRTCTimeStamp = new Date(data?.timestamp);
-                const currentTime = new Date();
-                const  currentDiff = (currentTime.getTime() - tencentWebRTCTimeStamp.getTime()) / 1000;
-                // if tencent webRTC latency is higher than 4 secs then relay on timestamp
-                if (currentDiff > 3) {
-                    alert('greater than 4 secs need to relay on slide sync timestamps');
+        if (videoTrack.frameHeight && videoTrack.frameWidth) {
+            if (videoTrack.bitrate || videoTrack.framesPerSecond) {
+                if (tencentJerkyFrames.length >=60) {
+                    alert('choppy video');
                     return;
+                }
+                if ( videoTrack['framesPerSecond'] < 20) {
+                    tencentJerkyFrames.push(videoTrack['framesPerSecond']);
+                } else {
+                    tencentJerkyFrames = [];
+                }
+                const bitrate = +(videoTrack['bitrate'] / 1000).toFixed(0);
+                const plr = audioTrack['packetsLost'] / (audioTrack['packetsLost'] + audioTrack['packetsReceived']) * 100;
+
+                if (tencentPacketsLoss.length > 60) {
+                    alert('video is jerky');
+                    return;
+                }
+
+                if (plr > 2) {
+                    tencentPacketsLoss.push(plr);
+                } else {
+                    tencentPacketsLoss = [];
+                }
+
+                /**
+                 * getting higher jitter even when the stream haven't much latency
+                 */
+                const jitter = audioTrack['jitterBufferDelay'] || 10;
+                console.log('bit', bitrate);
+                console.log('plr', plr);
+                console.log('jitter', jitter);
+
+                if (bitrate < 450) {
+                    alert('poor video quality');
+                } else {
+                    tencentWebRTCTimeStamp = new Date(data?.timestamp);
+                    const currentTime = new Date();
+                    const  currentDiff = (currentTime.getTime() - tencentWebRTCTimeStamp.getTime()) / 1000;
+                    // if tencent webRTC latency is higher than 4 secs then relay on timestamp
+                    if (currentDiff > 3) {
+                        alert('greater than 4 secs need to relay on slide sync timestamps');
+                        return;
+                    }
                 }
             }
         }
