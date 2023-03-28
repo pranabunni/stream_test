@@ -18,25 +18,132 @@ const Player: Component = () => {
     const [timeStamp, setTimeStamp] = createSignal('');
     let canSupportID3 = false;
     let wowzaRTCTimeStamp = null;
-    let tencentFPS = [];
-    const tencentTimeUpdate = ({data: {timestamp, video: {framesPerSecond}}}) => {
+    let tencentJerkyFrames = [];
+    let tencentPacketsLoss = [];
+    let wowzaMediaTracks = [];
+    let wowzaJerkyFramesList = [];
+    let wowzaPacketsLostList = [];
+    let wowzaView;
 
-        // minimum fps for playing a video with realistic motion is 24
-        if (framesPerSecond && framesPerSecond < 24 && tencentFPS.length < 60) {
-            tencentFPS = [...tencentFPS, framesPerSecond];
-        } else {
-            tencentFPS = []; // reset the array in case the video having an at least fps of greater than 24
+    const wowzaTimeUpdate = (stats) => {
+
+        console.log('stats', stats);
+        // rtt not available immediately after the first load
+        if ('currentRoundTripTime' in stats) {
+            const videoTrack = stats?.video?.inbounds[0] || null;
+            const audioTracks = stats?.audio?.inbounds[0] || null;
+
+            // ensure video FPS is available
+            // sometime stats APi wil fire even when player got stopped
+            if (videoTrack && audioTracks && (videoTrack.framesPerSecond || videoTrack.bitrate)) {
+                if (wowzaJerkyFramesList.length >= 60) {
+                    alert('video is jerky');
+                    return;
+                } else if (videoTrack.framesPerSecond < 20) {
+                    wowzaJerkyFramesList.push(videoTrack.framesPerSecond);
+                } else {
+                    wowzaJerkyFramesList = [];
+                    const plr = audioTracks.totalPacketsLost/(audioTracks.totalPacketsLost + audioTracks.totalPacketsReceived) * 100;
+
+                    if (wowzaPacketsLostList.length >= 60) {
+                        alert('video is jerky');
+                        return;
+                    }
+                    if (plr >= 2) {
+                        wowzaPacketsLostList.push(plr);
+                    } else {
+                        wowzaPacketsLostList = [];
+                    }
+
+                    /**
+                     * the stats api not providing a correct bitrate for the video tracks
+                     */
+                    const bitrate = +(audioTracks.bitrate / 1000).toFixed(0);
+                    const jitter = videoTrack.jitter;
+                    const rttp = stats.currentRoundTripTime || 100;
+
+                    console.log('plr', plr);
+                    console.log('jittr', jitter);
+                    console.log('rttp', rttp);
+                    console.log('bitrate', bitrate);
+
+                    if (rttp > 100 && jitter > 50) {
+                        alert('network related issues');
+                    } else {
+                        wowzaRTCTimeStamp = new Date(audioTracks.timestamp);
+                        const currentTime = new Date();
+                        const  currentDiff = (currentTime.getTime() - wowzaRTCTimeStamp.getTime()) / 1000;
+                        // if latency is higher than 4 secs then relay on timestamp
+                        if (currentDiff > 3) {
+                            alert('greater than 4 secs need to relay on slide sync timestamps');
+                        }
+                    }
+                }
+            } else {
+                alert('video is not playing');
+            }
         }
+    };
 
-        if (tencentFPS.length === 60) {
-            alert('Having trouble to play the video. Please reload the page again.');
-        } else if (timestamp) {
-            tencentWebRTCTimeStamp = new Date(timestamp);
-            const currentTime = new Date();
-            const  currentDiff = (currentTime.getTime() - tencentWebRTCTimeStamp.getTime()) / 1000;
-            // if tencent webRTC latency is higher than 4 secs then relay on timestamp
-            if (currentDiff > 3) {
-                alert('greater than 4 secs need to relay on slide sync timestamps');
+    const wowzaMediaTracker = (event) => {
+        if (event) {
+            // player.srcObject = event.streams[0];
+            event.track.onunmute = (res) => {
+                if (res.target.kind === 'video' || res.target.kind === 'audio') {
+                    wowzaMediaTracks.push(res.target);
+                }
+            };
+        }
+    };
+
+    const tencentTimeUpdate = ({data}) => {
+        console.log('stats', data);
+        const videoTrack = data?.video;
+        const audioTrack = data?.audio;
+
+        if (videoTrack && (videoTrack.bitrate || videoTrack.framesPerSecond)) {
+            if (tencentJerkyFrames.length >=60) {
+                alert('choppy video');
+                return;
+            }
+            if ( videoTrack['framesPerSecond'] < 20) {
+                tencentJerkyFrames.push(videoTrack['framesPerSecond']);
+            } else {
+                tencentJerkyFrames = [];
+            }
+            const bitrate = +(videoTrack['bitrate'] / 1000).toFixed(0);
+            const plr = audioTrack['packetsLost'] / (audioTrack['packetsLost'] + audioTrack['packetsReceived']) * 100;
+
+            if (tencentPacketsLoss.length > 60) {
+                alert('video is jerky');
+                return;
+            }
+
+            if (plr > 2) {
+                tencentPacketsLoss.push(plr);
+            } else {
+                tencentPacketsLoss = [];
+            }
+
+            /**
+             * getting higher jitter even when the stream haven't much latency
+             */
+            const jitter = audioTrack['jitterBufferDelay'] || 10;
+            console.log('bit', bitrate);
+            console.log('plr', plr);
+            console.log('jitter', jitter);
+
+            if (bitrate < 450) {
+                alert('poor video quality');
+            } else {
+                tencentWebRTCTimeStamp = new Date(data?.timestamp);
+                const currentTime = new Date();
+                const  currentDiff = (currentTime.getTime() - tencentWebRTCTimeStamp.getTime()) / 1000;
+                // if tencent webRTC latency is higher than 4 secs then relay on timestamp
+                if (currentDiff > 3) {
+                    alert('greater than 4 secs need to relay on slide sync timestamps');
+                    return;
+                }
             }
         }
     };
@@ -50,10 +157,15 @@ const Player: Component = () => {
                 if (player) {
                    player.destroy();
                    if (prevState === 'tencent') {
+                     //  tencent.off('webrtcstats', tencentTimeUpdate);
                        tencent = null;
                        tencentWebRTCTimeStamp = null;
-                       tencentFPS = [];
+                       tencentJerkyFrames = [];
+                       tencentPacketsLoss = [];
                        setTimeStamp('');
+                   }
+                   if (prevState === 'wowza') {
+                       wowzaView.webRTCPeer.off('stats', wowzaTimeUpdate);
                    }
                 }
                 if (playerElem) {
@@ -91,10 +203,18 @@ const Player: Component = () => {
                 player = null;
                 tencent = null;
                 tencentWebRTCTimeStamp = null;
-                tencentFPS = [];
+
+                tencentJerkyFrames = [];
+                tencentPacketsLoss = [];
+
+                wowzaMediaTracks = [];
+                wowzaPacketsLostList = [];
+                wowzaJerkyFramesList = [];
+
                 setTimeStamp('');
                 canSupportID3 = false;
                 wowzaRTCTimeStamp = null;
+
                 setState('playerPlaying', () => false);
             });
 
@@ -137,46 +257,29 @@ const Player: Component = () => {
 
 
     const configureWowzaStreaming = (streamName: string) => {
-
-        let fps = [];
         //Define callback for generate new token
         const tokenGenerator = () => Director.getSubscriber({streamName, streamAccountId: ''});
 
         //Create a new instance
-        const wowzaView = new View(streamName, tokenGenerator, player);
+        wowzaView = new View(streamName, tokenGenerator, player);
+
+        // Set track event handler to receive streams from Publisher.
+        wowzaView.on('track', wowzaMediaTracker);
+
+        player.on('loadeddata', () => {
+            if (wowzaMediaTracks.length !== 2) {
+                alert('video/audio tracks are not loaded correctly');
+            }
+        });
 
         //Start connection to publisher
         wowzaView.connect().then(() => {
             if (wowzaView.webRTCPeer) {
                 wowzaView.webRTCPeer.initStats();
                 //Capture new stats from event every second
-                wowzaView.webRTCPeer.on('stats', (stats) => {
-                    if (stats.video && stats.video.inbounds && stats.video.inbounds.length) {
-                        const frag = stats.video.inbounds[0];
-                        if (frag && frag.framesPerSecond && frag.framesPerSecond < 24 && fps.length < 60) {
-                            fps.push(frag.framesPerSecond);
-                        } else {
-                            fps = [];
-                        }
-                    }
-                    if (fps.length === 60) {
-                        alert('please turn off the low latency stream for now.')
-                    } else if (stats.raw) {
-                        stats.raw.forEach((report) => {
-                            if ('timestamp' in report) {
-                                wowzaRTCTimeStamp = new Date(report.timestamp);
-                                const currentTime = new Date();
-                                const  currentDiff = (currentTime.getTime() - wowzaRTCTimeStamp.getTime()) / 1000;
-                                // if tencent webRTC latency is higher than 4 secs then relay on timestamp
-                                if (currentDiff > 3) {
-                                    alert('greater than 4 secs need to relay on slide sync timestamps');
-                                }
-                            }
-                        });
-                    }
-                });
+                wowzaView.webRTCPeer.on('stats', wowzaTimeUpdate);
             }
-        }).catch(err => console.log('wowza webrtc connect error'));
+        }).catch(err => console.log('wowza webrtc connect error', err));
     }
 
     const configureTencentStreaming = (webRtcURL) => {
