@@ -16,6 +16,11 @@ const Player: Component = () => {
     let tencent = null;
     let tencentWebRTCTimeStamp = null;
     const [timeStamp, setTimeStamp] = createSignal('');
+    const [audioBits, setAudiBits] = createSignal(0);
+    const [videoBits, setVideoBits] = createSignal(0);
+    const [jitter, setJitter] = createSignal(0);
+    const [outGoingBit, setOutGoingBit] = createSignal(0);
+
     let canSupportID3 = false;
     let wowzaRTCTimeStamp = null;
     let tencentJerkyFrames = [];
@@ -46,6 +51,7 @@ const Player: Component = () => {
                     const plr = audioTracks.totalPacketsLost/(audioTracks.totalPacketsLost + audioTracks.totalPacketsReceived) * 100;
 
                     if (wowzaPacketsLostList.length >= 60) {
+                        console.log('plr list', wowzaPacketsLostList);
                         alert('video is jerky');
                         return;
                     }
@@ -58,16 +64,13 @@ const Player: Component = () => {
                     /**
                      * the stats api not providing a correct bitrate for the video tracks
                      */
-                    const bitrate = +(audioTracks.bitrate / 1000).toFixed(0);
-                    const jitter = videoTrack.jitter;
+                    setAudiBits(+(audioTracks.bitrate / 1000).toFixed(0));
+                    setVideoBits(+(videoTrack.bitrate / 1000).toFixed(0));
+                    setJitter(videoTrack.jitter);
+                    setOutGoingBit(stats.availableOutgoingBitrate);
                     const rttp = stats.currentRoundTripTime || 100;
 
-                    console.log('plr', plr);
-                    console.log('jittr', jitter);
-                    console.log('rttp', rttp);
-                    console.log('bitrate', bitrate);
-
-                    if (rttp > 100 && jitter > 50) {
+                    if (rttp > 100 && jitter() > 50) {
                         alert('network related issues');
                     } else {
                         wowzaRTCTimeStamp = new Date(audioTracks.timestamp);
@@ -112,10 +115,14 @@ const Player: Component = () => {
                 } else {
                     tencentJerkyFrames = [];
                 }
-                const bitrate = +(videoTrack['bitrate'] / 1000).toFixed(0);
+
+                setAudiBits(+(audioTrack['bitrate'] / 1000).toFixed(0));
+                setVideoBits(+(videoTrack['bitrate'] / 1000).toFixed(0));
+
                 const plr = audioTrack['packetsLost'] / (audioTrack['packetsLost'] + audioTrack['packetsReceived']) * 100;
 
                 if (tencentPacketsLoss.length > 60) {
+                    console.log('plr list', tencentPacketsLoss);
                     alert('video is jerky');
                     return;
                 }
@@ -129,12 +136,9 @@ const Player: Component = () => {
                 /**
                  * getting higher jitter even when the stream haven't much latency
                  */
-                const jitter = audioTrack['jitterBufferDelay'] || 10;
-                console.log('bit', bitrate);
-                console.log('plr', plr);
-                console.log('jitter', jitter);
+                setJitter( audioTrack['jitterBufferDelay'] || 10);
 
-                if (bitrate < 450) {
+                if (videoBits() < 450) {
                     alert('poor video quality');
                 } else {
                     tencentWebRTCTimeStamp = new Date(data?.timestamp);
@@ -165,6 +169,10 @@ const Player: Component = () => {
                        tencentJerkyFrames = [];
                        tencentPacketsLoss = [];
                        setTimeStamp('');
+                       setAudiBits(0);
+                       setVideoBits(0);
+                       setJitter(0);
+                       setOutGoingBit(0);
                    }
                    if (prevState === 'wowza') {
                        wowzaView.webRTCPeer.off('stats', wowzaTimeUpdate);
@@ -218,6 +226,10 @@ const Player: Component = () => {
                 canSupportID3 = false;
                 wowzaRTCTimeStamp = null;
 
+                setAudiBits(0);
+                setVideoBits(0);
+                setJitter(0);
+                setOutGoingBit(0);
                 setState('playerPlaying', () => false);
             });
 
@@ -360,9 +372,15 @@ const Player: Component = () => {
     };
     return (
         <div
-            class="px-4 verflow-hidden shadow rounded-md bg-white grid grid-rows-2 grid-flow-col min-h-fit">
+            class="px-4 overflow-hidden shadow rounded-md bg-white grid grid-rows-2 grid-flow-col min-h-fit">
             <div class="my-5 row-end-1">
-                <p class="text-2xl">Timestamp: <span id="player-timestamp" class="font-bold">{timeStamp()}</span></p>
+                <ul>
+                    <li class="text-2xl">Timestamp: <span id="player-timestamp" class="font-bold">{timeStamp()}</span></li>
+                    <li class="text-2xl">Audio Bit Rate: <span id="stream-audio-bit" class="font-bold">{audioBits() + 'kbps'}</span></li>
+                    <li class="text-2xl">Video Bit Rate: <span id="stream-video-bit" class="font-bold">{videoBits() + 'kbps'}</span></li>
+                    <li class="text-2xl">Jitter Delay <span id="stream-jitter" class="font-bold">{jitter() + 'ms'}</span></li>
+                    <li className="text-2xl">Outgoing bitrate: <span id="stream-jitter" class="font-bold">{outGoingBit() + 'kbps'}</span></li>
+                </ul>
             </div>
             <div class="my-5 row-start-1 row-span-2">
                 <div id="player" ref={playerElem}></div>
