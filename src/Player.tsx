@@ -20,6 +20,7 @@ const Player: Component = () => {
     const [videoBits, setVideoBits] = createSignal(0);
     const [jitter, setJitter] = createSignal(0);
     const [outGoingBit, setOutGoingBit] = createSignal(0);
+    const [fps, setFps] = createSignal(0);
 
     let canSupportID3 = false;
     let wowzaRTCTimeStamp = null;
@@ -48,42 +49,43 @@ const Player: Component = () => {
                     wowzaJerkyFramesList.push(videoTrack.framesPerSecond);
                 } else {
                     wowzaJerkyFramesList = [];
-                    const plr = audioTracks.totalPacketsLost/(audioTracks.totalPacketsLost + audioTracks.totalPacketsReceived) * 100;
+                }
+                const plr = audioTracks.totalPacketsLost/(audioTracks.totalPacketsLost + audioTracks.totalPacketsReceived) * 100;
 
-                    if (wowzaPacketsLostList.length >= 60) {
-                        console.log('plr list', wowzaPacketsLostList);
-                        alert('video is jerky');
-                        return;
-                    }
-                    if (plr >= 2) {
-                        wowzaPacketsLostList.push(plr);
-                    } else {
-                        wowzaPacketsLostList = [];
-                    }
+                if (wowzaPacketsLostList.length >= 60) {
+                    console.log('plr list', wowzaPacketsLostList);
+                    alert('video is jerky');
+                    return;
+                }
+                if (plr >= 2) {
+                    wowzaPacketsLostList.push(plr);
+                } else {
+                    wowzaPacketsLostList = [];
+                }
 
-                    /**
-                     * the stats api not providing a correct bitrate for the video tracks
-                     */
-                    setAudiBits(+(audioTracks.bitrate / 1000).toFixed(0));
-                    setVideoBits(+(videoTrack.bitrate / 1000).toFixed(0));
-                    setJitter(videoTrack.jitter);
-                    setOutGoingBit(stats.availableOutgoingBitrate);
-                    const rttp = stats.currentRoundTripTime || 100;
+                /**
+                 * the stats api not providing a correct bitrate for the video tracks
+                 */
+                setAudiBits(+(audioTracks.bitrate / 1000).toFixed(0));
+                setVideoBits(+(videoTrack.bitrate / 1000).toFixed(0));
+                setJitter(videoTrack.jitter);
+                setOutGoingBit(stats.availableOutgoingBitrate);
+                setFps(videoTrack.framesPerSecond || 0);
+                const rttp = stats.currentRoundTripTime || 100;
 
-                    if (rttp > 100 && jitter() > 50) {
-                        alert('network related issues');
-                    } else {
-                        wowzaRTCTimeStamp = new Date(audioTracks.timestamp);
-                        const currentTime = new Date();
-                        const  currentDiff = (currentTime.getTime() - wowzaRTCTimeStamp.getTime()) / 1000;
-                        // if latency is higher than 4 secs then relay on timestamp
-                        if (currentDiff > 3) {
-                            alert('greater than 4 secs need to relay on slide sync timestamps');
-                        }
+                if (rttp > 100 && jitter() > 50) {
+                    alert('network related issues');
+                } else {
+                    wowzaRTCTimeStamp = new Date(audioTracks.timestamp);
+                    const currentTime = new Date();
+                    const  currentDiff = (currentTime.getTime() - wowzaRTCTimeStamp.getTime()) / 1000;
+                    // if latency is higher than 4 secs then relay on timestamp
+                    if (currentDiff > 3) {
+                        alert('greater than 4 secs need to relay on slide sync timestamps');
                     }
                 }
             } else {
-                alert('video is not playing');
+                alert('video FPS/bitrate info is unavailable');
             }
         }
     };
@@ -118,7 +120,7 @@ const Player: Component = () => {
 
                 setAudiBits(+(audioTrack['bitrate'] / 1000).toFixed(0));
                 setVideoBits(+(videoTrack['bitrate'] / 1000).toFixed(0));
-
+                setFps(+(videoTrack['framesPerSecond']));
                 const plr = audioTrack['packetsLost'] / (audioTrack['packetsLost'] + audioTrack['packetsReceived']) * 100;
 
                 if (tencentPacketsLoss.length > 60) {
@@ -379,7 +381,9 @@ const Player: Component = () => {
                     <li class="text-2xl">Audio Bit Rate: <span id="stream-audio-bit" class="font-bold">{audioBits() + 'kbps'}</span></li>
                     <li class="text-2xl">Video Bit Rate: <span id="stream-video-bit" class="font-bold">{videoBits() + 'kbps'}</span></li>
                     <li class="text-2xl">Jitter Delay <span id="stream-jitter" class="font-bold">{jitter() + 'ms'}</span></li>
-                    <li className="text-2xl">Outgoing bitrate: <span id="stream-jitter" class="font-bold">{outGoingBit() + 'kbps'}</span></li>
+                    <li class="text-2xl">Outgoing bitrate: <span id="stream-jitter" class="font-bold">{outGoingBit() + 'kbps'}</span></li>
+                    <li class="text-2xl">FPS: <span id="stream-jitter" class="font-bold">{fps() + 's'}</span>
+                    </li>
                 </ul>
             </div>
             <div class="my-5 row-start-1 row-span-2">
